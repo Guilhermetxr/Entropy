@@ -46,10 +46,10 @@ function initEntropy() {
   const phaseLabel = art.querySelector('[data-phase]');
   const introHint = intro.querySelector('.scroll-note');
   const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  const INK = '17, 17, 15';
-  const INK_RGB = [17, 17, 15], ORANGE_RGB = [255, 90, 31];
-  // paleta do vortice: dourados/ambar + azul-marinho sobre fundo escuro
-  const VORTEX = [[242, 178, 62], [224, 122, 31], [255, 214, 140], [46, 84, 140], [30, 56, 98]];
+  // preto e branco: particulas claras sobre o fundo preto, com cinzas para dar profundidade
+  const FG = '244, 244, 242';
+  const FG_RGB = [244, 244, 242], GRAY_RGB = [130, 130, 128];
+  const VORTEX = [[255, 255, 255], [196, 196, 194], [232, 232, 230], [112, 112, 110], [72, 72, 70]];
   const ARMS = 5;
   const PHASES = [
     { name: 'bang', duration: 1700, label: 't = 0 / SINGULARIDADE' },
@@ -151,7 +151,7 @@ function initEntropy() {
       const r = name.getBoundingClientRect();
       o.font = `${style.fontWeight} ${style.fontSize} ${style.fontFamily}`;
       if ('letterSpacing' in o) o.letterSpacing = style.letterSpacing;
-      o.fillStyle = `rgb(${INK})`;
+      o.fillStyle = `rgb(${FG})`;
       o.textBaseline = 'middle';
       o.fillText(name.textContent.trim(), r.left - rect.left, r.top - rect.top + r.height / 2);
     }
@@ -160,7 +160,7 @@ function initEntropy() {
     for (let y = 0; y < bh; y += 2) {
       for (let x = 0; x < bw; x += 2) {
         const i = (y * bw + x) * 4;
-        if (data[i + 3] > 140) points.push({ x, y, accent: data[i] > 128, nx: x / bw });
+        if (data[i + 3] > 140) points.push({ x, y, accent: Math.random() < 0.12, nx: x / bw });
       }
     }
     for (let i = points.length - 1; i > 0; i--) {
@@ -393,7 +393,7 @@ function initEntropy() {
         }
       }
     }
-    ctx.strokeStyle = `rgba(${INK}, ${alpha})`;
+    ctx.strokeStyle = `rgba(${FG}, ${alpha})`;
     ctx.lineWidth = 1;
     ctx.stroke();
   }
@@ -403,10 +403,10 @@ function initEntropy() {
   }
 
   function drawParticles() {
-    // cores por grupo: tinta/laranja no caos, dourado/azul no vortice
+    // cores por grupo: branco/cinza no caos, escala de cinzas no vortice
     const colors = [
-      ...VORTEX.map((c) => mixColor(INK_RGB, c)),
-      ...VORTEX.map((c) => mixColor(ORANGE_RGB, c)),
+      ...VORTEX.map((c) => mixColor(FG_RGB, c)),
+      ...VORTEX.map((c) => mixColor(GRAY_RGB, c)),
     ];
     const paths = LAYERS.map(() => colors.map(() => new Path2D()));
     const zRange = boxZ * 2;
@@ -459,19 +459,13 @@ function initEntropy() {
     });
   }
 
-  // sem o quadro: o vortice ganha um disco escuro proprio, como um buraco negro sobre o papel
+  // halo claro e discreto atras do vortice
   function drawBackdrop() {
     if (vortexMix < 0.01) return;
     const r = vortexR * 1.4;
-    const dark = ctx.createRadialGradient(center.x, center.y, 0, center.x, center.y, r);
-    dark.addColorStop(0, `rgba(14, 13, 12, ${0.97 * vortexMix})`);
-    dark.addColorStop(0.72, `rgba(14, 13, 12, ${0.94 * vortexMix})`);
-    dark.addColorStop(1, 'rgba(14, 13, 12, 0)');
-    ctx.fillStyle = dark;
-    ctx.fillRect(center.x - r, center.y - r, r * 2, r * 2);
-    const glow = ctx.createRadialGradient(center.x, center.y, 0, center.x, center.y, vortexR * 1.1);
-    glow.addColorStop(0, `rgba(255, 150, 50, ${0.16 * vortexMix})`);
-    glow.addColorStop(1, 'rgba(255, 150, 50, 0)');
+    const glow = ctx.createRadialGradient(center.x, center.y, 0, center.x, center.y, r);
+    glow.addColorStop(0, `rgba(255, 255, 255, ${0.07 * vortexMix})`);
+    glow.addColorStop(1, 'rgba(255, 255, 255, 0)');
     ctx.fillStyle = glow;
     ctx.fillRect(center.x - r, center.y - r, r * 2, r * 2);
   }
@@ -486,7 +480,7 @@ function initEntropy() {
       const k = elapsed / 900;
       ctx.beginPath();
       ctx.arc(center.x, center.y, 8 + k * Math.max(w, h) * 0.6, 0, Math.PI * 2);
-      ctx.strokeStyle = `rgba(${INK}, ${(1 - k) * 0.55})`;
+      ctx.strokeStyle = `rgba(${FG}, ${(1 - k) * 0.55})`;
       ctx.lineWidth = 1;
       ctx.stroke();
     }
@@ -494,7 +488,7 @@ function initEntropy() {
       const k = elapsed / phase.duration;
       ctx.beginPath();
       ctx.arc(center.x, center.y, 2 + k * 6, 0, Math.PI * 2);
-      ctx.fillStyle = `rgb(${INK})`;
+      ctx.fillStyle = `rgb(${FG})`;
       ctx.fill();
     }
     drawParticles();
