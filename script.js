@@ -33,17 +33,21 @@ if (heroArt && artStage && canTilt) {
   });
 }
 
-// Hero 3D: singularidade -> big bang -> caos -> ordem local (vortice ENTROPY) -> caos -> colapso -> repete
+// Hero 3D: a marca ENTROPY se dissolve em particulas com o scroll, que seguem soltas pela tela no ciclo
+// caos -> ordem local (vortice) -> caos -> colapso -> singularidade/big bang -> caos -> ...
 function initEntropy() {
+  const canvas = document.querySelector('.entropy-canvas');
   const art = document.querySelector('.hero-art');
-  const canvas = art?.querySelector('.entropy-canvas');
-  if (!canvas) return;
+  const hero = document.querySelector('.hero');
+  const intro = document.querySelector('.intro');
+  const brand = intro?.querySelector('.intro-brand');
+  if (!canvas || !art || !hero || !intro || !brand) return;
   const ctx = canvas.getContext('2d');
   const phaseLabel = art.querySelector('[data-phase]');
+  const introHint = intro.querySelector('.scroll-note');
   const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   const INK = '17, 17, 15';
-  const PAPER = '242, 239, 233';
-  const INK_RGB = [17, 17, 15], PAPER_RGB = [242, 239, 233];
+  const INK_RGB = [17, 17, 15], ORANGE_RGB = [255, 90, 31];
   // paleta do vortice: dourados/ambar + azul-marinho sobre fundo escuro
   const VORTEX = [[242, 178, 62], [224, 122, 31], [255, 214, 140], [46, 84, 140], [30, 56, 98]];
   const ARMS = 5;
@@ -65,12 +69,23 @@ function initEntropy() {
   let w = 0, h = 0, scale = 1;
   let focal = 1, boxX = 1, boxY = 1, boxZ = 1, cube = 1, vortexR = 1;
   let particles = [];
-  let vortexMix = 0;
-  let phaseIndex = 0, phaseStart = 0, lastTime = 0;
-  let running = false, visible = false, frame = 0;
+  let glyph = [];
+  // dissolve: 0 = marca inteira, 1 = marca toda virou particula; sceneK suaviza a entrada da cena 3D
+  let vortexMix = 0, dissolve = 0, sceneK = 0, attachK = 0;
+  let phaseIndex = 1, phaseStart = 0, lastTime = 0;
+  let running = false, frame = 0;
+  const visibleSections = new Set();
+  const center = { x: 0, y: 0 };
+  const brandPos = { x: 0, y: 0 };
   const pointer = { x: 0, y: 0, nx: 0, ny: 0, active: false };
   const cam = { yaw: 0, pitch: 0, cy: 1, sy: 0, cp: 1, sp: 0 };
   const out = { x: 0, y: 0, s: 1, z: 0 };
+
+  const clamp = (v, min, max) => Math.min(max, Math.max(min, v));
+  const smoothstep = (a, b, v) => {
+    const t = clamp((v - a) / (b - a), 0, 1);
+    return t * t * (3 - 2 * t);
+  };
 
   function setCamera(yaw, pitch) {
     cam.yaw = yaw;
@@ -79,18 +94,97 @@ function initEntropy() {
     cam.cp = Math.cos(pitch); cam.sp = Math.sin(pitch);
   }
 
-  // mundo -> tela (rotacao da camera + perspectiva)
+  // mundo (relativo ao centro da cena) -> tela (rotacao da camera + perspectiva)
   function project(x, y, z) {
     const x1 = x * cam.cy + z * cam.sy;
     const z1 = -x * cam.sy + z * cam.cy;
     const y2 = y * cam.cp - z1 * cam.sp;
     const z2 = y * cam.sp + z1 * cam.cp;
     const s = focal / Math.max(focal + z2, focal * 0.2);
-    out.x = w / 2 + x1 * s;
-    out.y = h / 2 + y2 * s;
+    out.x = center.x + x1 * s;
+    out.y = center.y + y2 * s;
     out.s = s;
     out.z = z2;
     return out;
+  }
+
+  // onde a cena esta na tela: no meio da intro enquanto a marca se desfaz, depois presa ao hero
+  function readLayout() {
+    const introRect = intro.getBoundingClientRect();
+    dissolve = clamp(-introRect.top / Math.max(1, introRect.height - h), 0, 1);
+    const artRect = art.getBoundingClientRect();
+    const ax = artRect.left + artRect.width / 2;
+    const ay = artRect.top + artRect.height / 2;
+    // a nuvem espera no meio da tela ate a area do hero chegar la, e dai em diante rola junto com ela
+    attachK = smoothstep(0, 1, (h - ay) / (h / 2));
+    sceneK = Math.min(smoothstep(0.45, 1, dissolve), attachK);
+    center.x = w / 2 + (ax - w / 2) * attachK;
+    center.y = Math.min(ay, h / 2);
+    const brandRect = brand.getBoundingClientRect();
+    brandPos.x = brandRect.left;
+    brandPos.y = brandRect.top;
+    // a mascara acompanha a varredura das particulas, da esquerda para a direita
+    brand.style.setProperty('--cut', `${(((dissolve - 0.1) / 0.6) * 100).toFixed(1)}%`);
+    brand.style.opacity = dissolve > 0.8 ? '0' : '';
+    if (introHint) introHint.style.opacity = String(clamp(1 - dissolve * 5, 0, 1));
+    const heroBottom = hero.getBoundingClientRect().bottom;
+    canvas.style.opacity = String(clamp(heroBottom / (h * 0.5), 0, 1));
+  }
+
+  // amostra a marca (logo + nome) e da a cada particula um ponto de partida nela
+  function buildGlyph() {
+    const rect = brand.getBoundingClientRect();
+    const bw = Math.ceil(rect.width), bh = Math.ceil(rect.height);
+    if (!bw || !bh) return;
+    const off = document.createElement('canvas');
+    off.width = bw;
+    off.height = bh;
+    const o = off.getContext('2d');
+    const logo = brand.querySelector('.intro-logo');
+    if (logo?.complete && logo.naturalWidth) {
+      const r = logo.getBoundingClientRect();
+      o.drawImage(logo, r.left - rect.left, r.top - rect.top, r.width, r.height);
+    }
+    const name = brand.querySelector('.intro-name');
+    if (name) {
+      const style = getComputedStyle(name);
+      const r = name.getBoundingClientRect();
+      o.font = `${style.fontWeight} ${style.fontSize} ${style.fontFamily}`;
+      if ('letterSpacing' in o) o.letterSpacing = style.letterSpacing;
+      o.fillStyle = `rgb(${INK})`;
+      o.textBaseline = 'middle';
+      o.fillText(name.textContent.trim(), r.left - rect.left, r.top - rect.top + r.height / 2);
+    }
+    const data = o.getImageData(0, 0, bw, bh).data;
+    const points = [];
+    for (let y = 0; y < bh; y += 2) {
+      for (let x = 0; x < bw; x += 2) {
+        const i = (y * bw + x) * 4;
+        if (data[i + 3] > 140) points.push({ x, y, accent: data[i] > 128, nx: x / bw });
+      }
+    }
+    for (let i = points.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [points[i], points[j]] = [points[j], points[i]];
+    }
+    glyph = points;
+    particles.forEach(assignGlyph);
+  }
+
+  function assignGlyph(p, i) {
+    if (!glyph.length) return;
+    const g = glyph[i % glyph.length];
+    const extra = i >= glyph.length;
+    p.gx = g.x + (extra ? Math.random() * 2 - 1 : 0);
+    p.gy = g.y + (extra ? Math.random() * 2 - 1 : 0);
+    p.accent = g.accent;
+    p.thr = 0.04 + g.nx * 0.6 + Math.random() * 0.12;
+    if (dissolve < p.thr) {
+      p.settled = true;
+      p.x = brandPos.x + p.gx - center.x;
+      p.y = brandPos.y + p.gy - center.y;
+      p.z = 0;
+    }
   }
 
   function makeParticle() {
@@ -101,7 +195,8 @@ function initEntropy() {
       jx: (Math.random() - 0.5) * 2, jy: (Math.random() - 0.5) * 2,
       // espessura do disco do vortice
       jz: Math.random() * 2 - 1,
-      light: Math.random() < 0.12,
+      accent: Math.random() < 0.12,
+      gx: 0, gy: 0, thr: 0, settled: false,
       px: -1e4, py: -1e4,
       ...vortexSlot(),
     };
@@ -123,23 +218,28 @@ function initEntropy() {
   }
 
   function resize() {
-    const rect = canvas.getBoundingClientRect();
-    if (!rect.width || !rect.height) return;
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
     w = canvas.clientWidth;
     h = canvas.clientHeight;
-    scale = Math.min(w, h) / 480;
-    focal = Math.min(w, h) * 1.25;
-    boxX = w * 0.46; boxY = h * 0.46; boxZ = Math.min(w, h) * 0.42;
-    cube = Math.min(w, h) * 0.3;
-    vortexR = Math.min(w, h) * 0.4;
+    if (!w || !h) return;
+    const artSize = Math.min(art.clientWidth, art.clientHeight) || Math.min(w, h) * 0.6;
+    scale = artSize / 480;
+    focal = artSize * 1.25;
+    // o caos se espalha bem alem da area do hero
+    boxX = Math.min(w * 0.48, art.clientWidth * 1.1);
+    boxY = Math.min(h * 0.45, art.clientHeight * 0.85);
+    boxZ = artSize * 0.5;
+    cube = artSize * 0.3;
+    vortexR = artSize * 0.48;
     canvas.width = Math.round(w * dpr);
     canvas.height = Math.round(h * dpr);
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    const count = Math.round(Math.min(1300, (w * h) / 170));
+    const count = Math.round(clamp((w * h) / 800, 500, 1500));
     while (particles.length < count) particles.push(makeParticle());
     particles.length = count;
-    if (reduceMotion) drawStatic();
+    readLayout();
+    buildGlyph();
+    if (reduceMotion) placeStatic();
   }
 
   // alvo girando: o centro gira um pouco mais rapido e afunda como um funil
@@ -184,12 +284,6 @@ function initEntropy() {
     }
   }
 
-  function wrap(v, limit) {
-    if (v < -limit) return limit;
-    if (v > limit) return -limit;
-    return v;
-  }
-
   function update(now, f) {
     const phase = PHASES[phaseIndex];
     const elapsed = now - phaseStart;
@@ -197,6 +291,28 @@ function initEntropy() {
     const jitter = 0.08 * scale;
     const t1 = now * 0.0007, t2 = now * 0.00053, t3 = now * 0.00041;
     particles.forEach((p, i) => {
+      // ainda faz parte da marca: volta (ou fica) no seu ponto do logo/nome
+      if (glyph.length && dissolve < p.thr) {
+        const tx = brandPos.x + p.gx - center.x, ty = brandPos.y + p.gy - center.y;
+        if (p.settled) {
+          p.x = tx; p.y = ty; p.z = 0;
+          p.vx = 0; p.vy = 0; p.vz = 0;
+          return;
+        }
+        p.vx = (p.vx + (tx - p.x) * 0.08 * f) * Math.pow(0.75, f);
+        p.vy = (p.vy + (ty - p.y) * 0.08 * f) * Math.pow(0.75, f);
+        p.vz = (p.vz - p.z * 0.08 * f) * Math.pow(0.75, f);
+        p.x += p.vx * f; p.y += p.vy * f; p.z += p.vz * f;
+        if (Math.abs(tx - p.x) + Math.abs(ty - p.y) + Math.abs(p.z) < 2) p.settled = true;
+        return;
+      }
+      if (p.settled) {
+        // acabou de se soltar da marca: sai como poeira levada pelo vento
+        p.settled = false;
+        p.vx = (1 + Math.random() * 3) * scale;
+        p.vy = (Math.random() - 0.6) * 2 * scale;
+        p.vz = (Math.random() - 0.5) * 3 * scale;
+      }
       let drag = 0.97;
       const inForm = phase.name === 'form' && elapsed > p.delay;
       if (inForm) {
@@ -237,23 +353,31 @@ function initEntropy() {
           p.vz += ex * cam.sy + z1 * cam.cy;
         }
       }
+      if (phase.name === 'chaos' || (phase.name === 'form' && !inForm)) {
+        // sem parede: fora do elipsoide, uma forca suave traz a particula de volta
+        const q = (p.x / boxX) ** 2 + (p.y / boxY) ** 2 + (p.z / boxZ) ** 2;
+        if (q > 1) {
+          const pull = Math.min(q - 1, 3) * 0.004 * f;
+          p.vx -= p.x * pull; p.vy -= p.y * pull; p.vz -= p.z * pull;
+        }
+      }
       const damp = Math.pow(drag, f);
       p.vx *= damp; p.vy *= damp; p.vz *= damp;
       p.x += p.vx * f; p.y += p.vy * f; p.z += p.vz * f;
-      if (phase.name === 'chaos' || (phase.name === 'form' && !inForm)) {
-        p.x = wrap(p.x, boxX); p.y = wrap(p.y, boxY); p.z = wrap(p.z, boxZ);
-      }
     });
   }
 
   function updateCamera(now, f) {
-    const targetYaw = Math.sin(now * 0.00025) * 0.7 * (1 - vortexMix * 0.5) + pointer.nx * 0.5;
-    const targetPitch = Math.sin(now * 0.00017) * 0.22 - 0.1 - pointer.ny * 0.35;
+    // enquanto a marca se desfaz a camera fica de frente, para as particulas nascerem em cima das letras
+    const targetYaw = (Math.sin(now * 0.00025) * 0.7 * (1 - vortexMix * 0.5) + pointer.nx * 0.5) * sceneK;
+    const targetPitch = (Math.sin(now * 0.00017) * 0.22 - 0.1 - pointer.ny * 0.35) * sceneK;
     const ease = 1 - Math.pow(0.95, f);
     setCamera(cam.yaw + (targetYaw - cam.yaw) * ease, cam.pitch + (targetPitch - cam.pitch) * ease);
   }
 
   function drawCube() {
+    const alpha = 0.14 * (1 - vortexMix) * sceneK;
+    if (alpha < 0.005) return;
     const c = cube;
     const corners = [];
     for (let i = 0; i < 8; i++) {
@@ -269,7 +393,7 @@ function initEntropy() {
         }
       }
     }
-    ctx.strokeStyle = `rgba(${INK}, ${0.14 * (1 - vortexMix)})`;
+    ctx.strokeStyle = `rgba(${INK}, ${alpha})`;
     ctx.lineWidth = 1;
     ctx.stroke();
   }
@@ -279,23 +403,27 @@ function initEntropy() {
   }
 
   function drawParticles() {
-    // cores por grupo: tinta/papel no caos, dourado/azul no vortice
+    // cores por grupo: tinta/laranja no caos, dourado/azul no vortice
     const colors = [
       ...VORTEX.map((c) => mixColor(INK_RGB, c)),
-      ...VORTEX.map((c) => mixColor(PAPER_RGB, c)),
+      ...VORTEX.map((c) => mixColor(ORANGE_RGB, c)),
     ];
     const paths = LAYERS.map(() => colors.map(() => new Path2D()));
     const zRange = boxZ * 2;
     const tailK = 2.4 + vortexMix * 7;
     const shards = vortexMix > 0.35;
     particles.forEach((p) => {
+      if (p.settled) {
+        p.px = -1e4;
+        return;
+      }
       const tailX = p.x - p.vx * tailK, tailY = p.y - p.vy * tailK, tailZ = p.z - p.vz * tailK;
       const head = project(p.x, p.y, p.z);
       const hx = head.x, hy = head.y, s = head.s, z = head.z;
       p.px = hx; p.py = hy;
       if (hx < -40 || hx > w + 40 || hy < -40 || hy > h + 40) return;
       const layer = LAYERS.length - 1 - Math.max(0, Math.min(LAYERS.length - 1, Math.floor(((z + boxZ) / zRange) * LAYERS.length)));
-      const path = paths[layer][p.hue + (p.light ? VORTEX.length : 0)];
+      const path = paths[layer][p.hue + (p.accent ? VORTEX.length : 0)];
       const tail = project(tailX, tailY, tailZ);
       const dx = hx - tail.x, dy = hy - tail.y;
       if (shards && p.shard) {
@@ -303,8 +431,8 @@ function initEntropy() {
         const speed = Math.hypot(dx, dy);
         const ux = speed > 0.5 ? dx / speed : -Math.sin(p.va);
         const uy = speed > 0.5 ? dy / speed : Math.cos(p.va);
-        const len = Math.max(speed, 5 * s);
-        const half = len * (0.25 + Math.abs(p.jx) * 0.2);
+        const len = Math.min(Math.max(speed, 5 * s), 16 * s);
+        const half = len * (0.1 + Math.abs(p.jx) * 0.16);
         // base levemente torta para cada estilhaco ter um formato diferente
         const bx = hx - ux * len * (1 + p.jy * 0.3), by = hy - uy * len * (1 + p.jy * 0.3);
         path.moveTo(hx, hy);
@@ -331,16 +459,21 @@ function initEntropy() {
     });
   }
 
-  // fundo escuro com brilho quente no centro, so enquanto o vortice existe
+  // sem o quadro: o vortice ganha um disco escuro proprio, como um buraco negro sobre o papel
   function drawBackdrop() {
     if (vortexMix < 0.01) return;
-    ctx.fillStyle = `rgba(14, 13, 12, ${vortexMix})`;
-    ctx.fillRect(0, 0, w, h);
-    const glow = ctx.createRadialGradient(w / 2, h / 2, 0, w / 2, h / 2, vortexR * 1.3);
+    const r = vortexR * 1.4;
+    const dark = ctx.createRadialGradient(center.x, center.y, 0, center.x, center.y, r);
+    dark.addColorStop(0, `rgba(14, 13, 12, ${0.97 * vortexMix})`);
+    dark.addColorStop(0.72, `rgba(14, 13, 12, ${0.94 * vortexMix})`);
+    dark.addColorStop(1, 'rgba(14, 13, 12, 0)');
+    ctx.fillStyle = dark;
+    ctx.fillRect(center.x - r, center.y - r, r * 2, r * 2);
+    const glow = ctx.createRadialGradient(center.x, center.y, 0, center.x, center.y, vortexR * 1.1);
     glow.addColorStop(0, `rgba(255, 150, 50, ${0.16 * vortexMix})`);
     glow.addColorStop(1, 'rgba(255, 150, 50, 0)');
     ctx.fillStyle = glow;
-    ctx.fillRect(0, 0, w, h);
+    ctx.fillRect(center.x - r, center.y - r, r * 2, r * 2);
   }
 
   function draw(now) {
@@ -352,7 +485,7 @@ function initEntropy() {
     if (phase.name === 'bang' && elapsed < 900) {
       const k = elapsed / 900;
       ctx.beginPath();
-      ctx.arc(w / 2, h / 2, 8 + k * Math.max(w, h) * 0.8, 0, Math.PI * 2);
+      ctx.arc(center.x, center.y, 8 + k * Math.max(w, h) * 0.6, 0, Math.PI * 2);
       ctx.strokeStyle = `rgba(${INK}, ${(1 - k) * 0.55})`;
       ctx.lineWidth = 1;
       ctx.stroke();
@@ -360,17 +493,20 @@ function initEntropy() {
     if (phase.name === 'collapse') {
       const k = elapsed / phase.duration;
       ctx.beginPath();
-      ctx.arc(w / 2, h / 2, 2 + k * 6, 0, Math.PI * 2);
+      ctx.arc(center.x, center.y, 2 + k * 6, 0, Math.PI * 2);
       ctx.fillStyle = `rgb(${INK})`;
       ctx.fill();
     }
     drawParticles();
   }
 
-  function drawStatic() {
+  // movimento reduzido: sem dissolver a marca, o vortice aparece parado no hero
+  function placeStatic() {
     setCamera(0.25, -0.15);
-    setVortexMix(1);
+    vortexMix = 1;
     particles.forEach((p, i) => {
+      p.settled = false;
+      p.thr = 0;
       if (i % 10 < 7) {
         const t = targetFor(i, 0);
         p.x = t.x; p.y = t.y; p.z = t.z;
@@ -378,24 +514,36 @@ function initEntropy() {
       p.vx = 0; p.vy = 0; p.vz = 0;
     });
     if (phaseLabel) phaseLabel.textContent = 'ORDEM LOCAL / FORMA';
-    ctx.clearRect(0, 0, w, h);
-    drawBackdrop();
-    drawCube();
-    drawParticles();
+    drawStatic();
   }
 
-  function setVortexMix(value) {
-    vortexMix = value;
-    art.classList.toggle('is-vortex', value > 0.5);
+  function drawStatic() {
+    readLayout();
+    const artRect = art.getBoundingClientRect();
+    center.x = artRect.left + artRect.width / 2;
+    center.y = artRect.top + artRect.height / 2;
+    brand.style.opacity = '';
+    brand.style.setProperty('--cut', '-20%');
+    sceneK = 1;
+    ctx.clearRect(0, 0, w, h);
+    drawBackdrop();
+    drawParticles();
   }
 
   function tick(now) {
     if (!running) return;
     const f = Math.min((now - lastTime) / 16.67, 3);
     lastTime = now;
-    if (now - phaseStart > PHASES[phaseIndex].duration) enterPhase(phaseIndex + 1, now);
+    readLayout();
+    if (dissolve < 0.98 || attachK < 0.9) {
+      // o ciclo so comeca quando a marca terminou de se desfazer e o hero chegou; ate la, caos livre
+      if (phaseIndex !== 1) enterPhase(1, now);
+      phaseStart = now;
+    } else if (now - phaseStart > PHASES[phaseIndex].duration) {
+      enterPhase(phaseIndex + 1, now);
+    }
     const mixTarget = PHASES[phaseIndex].name === 'form' ? 1 : 0;
-    setVortexMix(vortexMix + (mixTarget - vortexMix) * (1 - Math.pow(0.96, f)));
+    vortexMix += (mixTarget - vortexMix) * (1 - Math.pow(0.96, f));
     updateCamera(now, f);
     update(now, f);
     draw(now);
@@ -407,35 +555,46 @@ function initEntropy() {
     running = shouldRun;
     if (running) {
       lastTime = performance.now();
-      // primeira vez: comeca no big bang; ao voltar, desloca o relogio para nao pular etapas
-      if (!setRunning.pausedAt) enterPhase(0, lastTime);
+      if (!setRunning.pausedAt) enterPhase(1, lastTime);
       else phaseStart += lastTime - setRunning.pausedAt;
       frame = requestAnimationFrame(tick);
     } else {
       setRunning.pausedAt = performance.now();
       cancelAnimationFrame(frame);
+      canvas.style.opacity = '0';
     }
   }
 
   resize();
   new ResizeObserver(resize).observe(canvas);
-  if (reduceMotion) return;
+  const rebuild = () => { readLayout(); buildGlyph(); };
+  document.fonts?.ready.then(rebuild);
+  brand.querySelector('.intro-logo')?.addEventListener('load', rebuild);
 
-  new IntersectionObserver(([entry]) => {
-    visible = entry.isIntersecting;
-    setRunning(visible && !document.hidden);
-  }).observe(art);
-  document.addEventListener('visibilitychange', () => setRunning(visible && !document.hidden));
+  if (reduceMotion) {
+    window.addEventListener('scroll', drawStatic, { passive: true });
+    return;
+  }
 
-  art.addEventListener('pointermove', (event) => {
-    const rect = canvas.getBoundingClientRect();
-    pointer.x = ((event.clientX - rect.left) / rect.width) * w;
-    pointer.y = ((event.clientY - rect.top) / rect.height) * h;
-    pointer.nx = pointer.x / w - 0.5;
-    pointer.ny = pointer.y / h - 0.5;
-    pointer.active = true;
+  const sectionObserver = new IntersectionObserver((entries) => {
+    entries.forEach((entry) => {
+      if (entry.isIntersecting) visibleSections.add(entry.target);
+      else visibleSections.delete(entry.target);
+    });
+    setRunning(visibleSections.size > 0 && !document.hidden);
   });
-  art.addEventListener('pointerleave', () => {
+  sectionObserver.observe(intro);
+  sectionObserver.observe(hero);
+  document.addEventListener('visibilitychange', () => setRunning(visibleSections.size > 0 && !document.hidden));
+
+  window.addEventListener('pointermove', (event) => {
+    pointer.x = event.clientX;
+    pointer.y = event.clientY;
+    pointer.nx = (pointer.x - center.x) / w;
+    pointer.ny = (pointer.y - center.y) / h;
+    pointer.active = event.pointerType === 'mouse';
+  }, { passive: true });
+  document.documentElement.addEventListener('mouseleave', () => {
     pointer.active = false;
     pointer.nx = 0;
     pointer.ny = 0;
