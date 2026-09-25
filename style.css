@@ -25,9 +25,8 @@ button { font: inherit; }
 .site-header { width: min(1240px, calc(100% - 80px)); height: 88px; margin: 0 auto; display: flex; align-items: center; justify-content: space-between; position: relative; z-index: 20; }
 .brand { display: flex; align-items: center; gap: 10px; font-size: 20px; font-weight: 700; letter-spacing: .08em; }
 .brand-dot { color: var(--orange); }
-.brand-mark { display: flex; align-items: end; gap: 3px; height: 18px; }
-.brand-mark i { display: block; width: 4px; background: var(--orange); transform: skew(-20deg); }
-.brand-mark i:nth-child(1) { height: 9px; }.brand-mark i:nth-child(2) { height: 14px; }.brand-mark i:nth-child(3) { height: 18px; }
+.brand-mark { display: block; width: 30px; height: 30px; transition: transform .6s var(--ease); }
+.brand:hover .brand-mark { transform: rotate(60deg); }
 .main-nav { display: flex; gap: 36px; margin-left: auto; margin-right: 56px; font-family: 'DM Mono', monospace; font-size: 11px; text-transform: uppercase; letter-spacing: .08em; }
 .main-nav a, .footer-links a { transition: color .2s ease; }.main-nav a:hover, .footer-links a:hover { color: var(--orange); }
 .header-cta { font-family: 'DM Mono', monospace; font-size: 11px; text-transform: uppercase; border-bottom: 1px solid var(--ink); padding-bottom: 5px; }.header-cta span, .button span { color: var(--orange); font-size: 16px; margin-left: 8px; }

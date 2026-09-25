@@ -1,7 +1,7 @@
-# NEXO design tokens
+# ENTROPY design tokens
 
 ## Direcao
-Marca provisoria para um estudio digital independente. A identidade combina uma base editorial escura, laranja de alta energia e tipografia tecnica para comunicar clareza, movimento e proximidade.
+Estudio digital independente ENTROPY. A logo e uma estrela de estilhacos laranja (`assets/entropy-logo.png`), simbolo do caos que vira forma. A identidade combina uma base editorial escura, laranja de alta energia e tipografia tecnica para comunicar clareza, movimento e proximidade.
 
 ## Fundacao
 - Cores: preto quente `#11110F`, papel `#F2EFE9`, laranja `#FF5A1F`.
