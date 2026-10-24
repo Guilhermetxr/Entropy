@@ -597,7 +597,7 @@ function initEntropy() {
 
 initEntropy();
 
-const WHATSAPP_NUMBER = '5598984853656';
+const WHATSAPP_NUMBER = '5598970286636';
 
 function setServiceItemState(item, open) {
   const toggle = item.querySelector('.service-toggle');
